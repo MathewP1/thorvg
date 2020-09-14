@@ -31,6 +31,11 @@ struct Line
     Point pt2;
 };
 
+struct LongPoint
+{
+    int32_t x, y;
+};
+
 
 static SwPoint _transform(const Point* to, const Matrix* transform)
 {
@@ -440,6 +445,87 @@ bool _fastTrack(const SwOutline* outline)
     return false;
 }
 
+void _intersect(LongPoint &a, LongPoint &b, LongPoint &c, LongPoint &d, SwPoint **intersection, bool &overlap)
+{
+    *intersection = nullptr;
+    int32_t a1, b1, c1, a2, b2, c2;
+    int32_t interval_min, interval_max;
+    int32_t x, y;
+    a1 = a.y - b.y;
+    b1 = b.x - a.x;
+    c1 = a.x * (b.y - a.y) - a.y * (b.x - a.x);
+    a2 = c.y - d.y;
+    b2 = d.x - c.x;
+    c2 = c.x * (d.y - c.y) - c.y * (d.x - c.x);
+    // printf("%dx + %dy + %d\n%dx + %dy + %d\n", a1, b1, c1, a2, b2, c2);
+    printf("Calculating intersection for lines: [(%ld, %ld), (%ld, %ld)] [(%ld, %ld), (%ld, %ld)]\n", a.x/64, a.y/64, b.x/64, b.y/64, c.x/64, c.y/64, d.x/64, d.y/64);
+
+    auto det = a1 * b2 - a2 * b1;
+    if (det == 0)
+    {
+        // no solutions or lines overlap
+        auto det1 = a1 * c2 - a2 * c1;
+        auto det2 = b1 * c2 - b2 * c1;
+        if (det1 == 0 && det2 == 0)
+            overlap = true;
+        else return;
+    }
+
+    // find intersecting point
+    x = (c1 * b2 - c2 * b1)/det;
+        if (x < max( min(a.x, b.x), min(c.x, d.x)) || x > min( max(a.x, b.x), max(c.x, d.x))){
+            // *intersection = static_cast<SwPoint*>(calloc(1, sizeof(SwPoint)));
+            // (**intersection).y = (a1 * c2 - a2 * c1)/det;
+            y = (a1 * c2 - a2 * c1)/det;
+            // (**intersection).x = x;
+            printf("Found intersection: %d %d\n", x, y);
+        }
+}
+
+uint32_t _getIntersections(SwOutline* stencil, SwOutline* outline, uint32_t outline_num)
+{
+    uint32_t first1 = 0;
+    uint32_t last1 = stencil->cntrs[0];
+    uint32_t first2 = outline->cntrs[outline_num - 1];
+    uint32_t last2 = outline->cntrs[outline_num];
+    uint32_t x1, y1, x2, y2, dx1, dy1, dx2, dy2, a1, b1, a2, b2;
+    LongPoint pt1_stencil, pt2_stencil, pt1_outline, pt2_outline;
+    SwPoint *intersect_pts = nullptr;
+    bool overlap;
+
+
+    int i = 0;
+    // look for intersections
+    uint32_t pts1 = first1;
+    while (pts1 < last1){
+        uint32_t pts2 = first2+1;
+        pt1_stencil.x = stencil->pts[pts1].x;
+        pt1_stencil.y = stencil->pts[pts1].y;
+        pt2_stencil.x = stencil->pts[pts1 + 1].x;
+        pt2_stencil.y = stencil->pts[pts1 + 1].y;
+
+        while (pts2 < last2){
+            overlap = false;
+            pt1_outline.x = outline->pts[pts2].x;
+            pt1_outline.y = outline->pts[pts2].y;
+            pt2_outline.x = outline->pts[pts2 + 1].x;
+            pt2_outline.y = outline->pts[pts2 + 1].y;
+            _intersect(pt1_stencil, pt2_stencil, pt1_outline, pt2_outline, &intersect_pts, overlap);
+            if (intersect_pts != nullptr){
+                // printf("found intersection\n");
+            } else{
+                // printf("No interesection found\n");
+            }
+            pts2++;
+        }
+        pts1++;
+    }
+
+
+    printf("Num comp: %d", i);
+    return 0;
+}
+
 
 /************************************************************************/
 /* External Class Implementation                                        */
@@ -578,7 +664,6 @@ bool shapeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transform
     return true;
 }
 
-
 void shapeFree(SwShape* shape)
 {
     shapeDelOutline(shape);
@@ -614,6 +699,77 @@ void shapeResetStroke(SwShape* shape, const Shape* sdata, const Matrix* transfor
     shape->strokeRle = nullptr;
 }
 
+bool shapePrepareStencil(SwShape* shape, const Shape* sdata, const Matrix* transform)
+{
+    SwOutline* outline = shape->outline;
+
+    printf("Outline info\n");
+    printf("CntrsCnt: %u, ReservedCntrsCnt: %u, PtsCnt: %u, ReservedPtsCnt: "
+            "%u\n",
+            outline->cntrsCnt, outline->reservedCntrsCnt, outline->ptsCnt,
+            outline->reservedPtsCnt);
+    printf("Cntr end points: ");
+    for (int ii = 0; ii < outline->cntrsCnt; ii++)
+        printf("%u ", outline->cntrs[ii]);
+    printf("\n");
+    printf("Pts: ");
+    for (int ii = 0; ii < outline->ptsCnt; ii++)
+        printf("(%ld, %ld), type: %u\n", outline->pts[ii].x / 64,
+                outline->pts[ii].y / 64, outline->types[ii]);
+    printf("\n");
+
+
+    SwOutline* stencil = nullptr;
+    // SwPoint *intrsc_pts = nullptr;
+    uint32_t intrsc_num = 0;
+
+    if (outline->cntrsCnt < 2) return false;    //if less than 2 cnts no need to make stencil
+    if (outline->cntrsCnt == 2 && outline->opened) return false;
+
+    // TODO: move this to _initStencil(SwOutline* stencil, SwOutline* stroke);
+    stencil = static_cast<SwOutline*>(calloc(1, sizeof(SwOutline)));
+    stencil->cntrsCnt = 1;
+    stencil->cntrs = static_cast<uint32_t*>(calloc(1, sizeof(uint32_t)));
+    stencil->cntrs[0] = outline->cntrs[0];
+    stencil->pts = static_cast<SwPoint*>(calloc(outline->ptsCnt, sizeof(SwPoint)));
+    // copy first contour
+    memcpy(stencil->pts, outline->pts, sizeof(SwPoint)*(outline->cntrs[0] + 1));
+    stencil->ptsCnt = outline->cntrs[0] + 1;
+    stencil->reservedCntrsCnt = 2;
+    stencil->reservedPtsCnt = outline->reservedPtsCnt;
+    stencil->types = static_cast<uint8_t*>(calloc(outline->ptsCnt, sizeof(uint8_t)));
+    memcpy(stencil->types, outline->types, sizeof(SwPoint)*(outline->cntrs[0] + 1));
+    stencil->fillMode = outline->fillMode;
+    //debug
+    printf("Stencil info\n");
+    printf("CntrsCnt: %u, ReservedCntrsCnt: %u, PtsCnt: %u, ReservedPtsCnt: "
+            "%u\n",
+            stencil->cntrsCnt, stencil->reservedCntrsCnt, stencil->ptsCnt,
+            stencil->reservedPtsCnt);
+    printf("Outline Cntr end points: ");
+    for (int ii = 0; ii < outline->cntrsCnt; ii++)
+        printf("%u ", outline->cntrs[ii]);
+    printf("\n");
+    printf("Pts: ");
+    for (int ii = 0; ii < stencil->ptsCnt; ii++)
+        printf("(%ld, %ld), type: %u\n", stencil->pts[ii].x / 64,
+                stencil->pts[ii].y / 64, stencil->types[ii]);
+    printf("\n");
+    // stencil->opened
+
+    for (uint32_t i = 1; i < outline->cntrsCnt; i++){
+        intrsc_num = _getIntersections(stencil, outline, i);
+
+        if (intrsc_num < 2){
+            // contours are probably not joined
+        } else{
+            // join contours
+
+        }
+    }
+    shape->stencil = stencil;
+    return true;
+}
 
 bool shapeGenStrokeRle(SwShape* shape, const Shape* sdata, const Matrix* transform, const SwSize& clip)
 {
@@ -621,6 +777,9 @@ bool shapeGenStrokeRle(SwShape* shape, const Shape* sdata, const Matrix* transfo
     SwOutline* strokeOutline = nullptr;
     bool freeOutline = false;
     bool ret = true;
+    SwOutline* stencil = nullptr;
+    SwPoint* intrs_pts = nullptr;
+    uint32_t intrs_num = 0;
 
     //Dash Style Stroke
     if (sdata->strokeDash(nullptr) > 0) {
@@ -633,6 +792,11 @@ bool shapeGenStrokeRle(SwShape* shape, const Shape* sdata, const Matrix* transfo
             if (!shapeGenOutline(shape, sdata, transform)) return false;
         }
         shapeOutline = shape->outline;
+    }
+
+    // prepare shape stencil
+    if (shapePrepareStencil(shape, sdata, transform)){
+        shapeOutline = shape->stencil;
     }
 
     if (!strokeParseOutline(shape->stroke, *shapeOutline)) {

@@ -846,9 +846,23 @@ void strokeReset(SwStroke* stroke, const Shape* sdata, const Matrix* transform)
     stroke->borders[1].valid = false;
 }
 
-
 bool strokeParseOutline(SwStroke* stroke, const SwOutline& outline)
 {
+    printf("Outline info\n");
+    printf("CntrsCnt: %u, ReservedCntrsCnt: %u, PtsCnt: %u, ReservedPtsCnt: "
+            "%u\n",
+            outline.cntrsCnt, outline.reservedCntrsCnt, outline.ptsCnt,
+            outline.reservedPtsCnt);
+    printf("Cntr end points: ");
+    for (int ii = 0; ii < outline.cntrsCnt; ii++)
+        printf("%u ", outline.cntrs[ii]);
+    printf("\n");
+    printf("Pts: ");
+    for (int ii = 0; ii < outline.ptsCnt; ii++)
+        printf("(%ld, %ld), type: %u\n", outline.pts[ii].x / 64,
+                outline.pts[ii].y / 64, outline.types[ii]);
+    printf("\n");
+
     uint32_t first = 0;
 
     for (uint32_t i = 0; i < outline.cntrsCnt; ++i) {
@@ -900,7 +914,6 @@ bool strokeParseOutline(SwStroke* stroke, const SwOutline& outline)
     }
     return true;
 }
-
 
 SwOutline* strokeExportOutline(SwStroke* stroke)
 {

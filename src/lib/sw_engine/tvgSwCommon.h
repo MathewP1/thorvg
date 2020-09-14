@@ -204,6 +204,7 @@ struct SwFill
 struct SwShape
 {
     SwOutline*   outline = nullptr;
+    SwOutline*   stencil = nullptr;
     SwStroke*    stroke = nullptr;
     SwFill*      fill = nullptr;
     SwRleData*   rle = nullptr;
@@ -272,6 +273,7 @@ bool shapePrepare(SwShape* shape, const Shape* sdata, const SwSize& clip, const 
 bool shapeGenRle(SwShape* shape, const Shape* sdata, const SwSize& clip, bool antiAlias);
 void shapeDelOutline(SwShape* shape);
 void shapeResetStroke(SwShape* shape, const Shape* sdata, const Matrix* transform);
+bool shapePrepareStencil(SwShape* shape, const Shape* sdata, const Matrix* transform);
 bool shapeGenStrokeRle(SwShape* shape, const Shape* sdata, const Matrix* transform, const SwSize& clip);
 void shapeFree(SwShape* shape);
 void shapeDelStroke(SwShape* shape);
