@@ -204,6 +204,7 @@ struct SwFill
 struct SwShape
 {
     SwOutline*   outline = nullptr;
+    SwOutline*   stroke_outline = nullptr;
     SwStroke*    stroke = nullptr;
     SwFill*      fill = nullptr;
     SwRleData*   rle = nullptr;

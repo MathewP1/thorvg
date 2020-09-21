@@ -578,6 +578,107 @@ bool shapeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transform
     return true;
 }
 
+bool strokeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transform)
+{
+    const PathCommand *cmds = nullptr;
+    auto cmdCnt = sdata->pathCommands(&cmds);
+
+    const Point* pts = nullptr;
+    auto ptsCnt = sdata->pathCoords(&pts);
+
+    if (cmdCnt == 0 || ptsCnt == 0) return false;
+
+    //smart reservation
+    auto outlinePtsCnt = 0;
+    auto outlineCntrsCnt = 0;
+
+    for (uint32_t i = 0; i < cmdCnt; ++i){
+        switch(*(cmds + i)) {
+            case PathCommand::Close: {
+                ++outlinePtsCnt;
+                break;
+            }
+            case PathCommand::MoveTo: {
+                ++outlineCntrsCnt;
+                ++outlinePtsCnt;
+                break;
+            }
+            case PathCommand::LineTo: {
+                ++outlinePtsCnt;
+                break;
+            }
+            case PathCommand::CubicTo: {
+                outlinePtsCnt += 3;
+                break;
+            }
+        }
+    }
+    ++outlinePtsCnt;
+    ++outlineCntrsCnt;
+
+    auto stroke_outline = shape->stroke_outline;
+    if (!stroke_outline) stroke_outline = static_cast<SwOutline*>(calloc(1, sizeof(SwOutline)));
+    stroke_outline->opened = true;
+
+    _growOutlinePoint(*stroke_outline, outlinePtsCnt);
+    _growOutlineContour(*stroke_outline, outlineCntrsCnt);
+
+    for (int i = 0; i < cmdCnt; i++){
+        printf("Cmd: %i, Point: %f %f\n", cmds[i], pts[i].x, pts[i].y);
+    }
+
+    auto closed = false;
+    // copy first contour into stroke_outline
+    while (cmdCnt-- > 0){
+        switch(*cmds) {
+            case PathCommand::Close: {
+                _outlineClose(*stroke_outline);
+                closed = true;
+                break;
+            }
+            case PathCommand::MoveTo: {
+                _outlineMoveTo(*stroke_outline, pts, transform);
+                ++pts;
+                break;
+            }
+            case PathCommand::LineTo: {
+                _outlineLineTo(*stroke_outline, pts, transform);
+                ++pts;
+                break;
+            }
+            case PathCommand::CubicTo: {
+                _outlineCubicTo(*stroke_outline, pts, pts + 1, pts + 2, transform);
+                pts += 3;
+                break;
+            }
+        }
+        ++cmds;
+        if (closed) break;
+    }
+    if (!closed) return false;
+    for (int i = 0; i < stroke_outline->ptsCnt; i++)
+        printf("%f %f\n", stroke_outline->pts[i].x/64.0, stroke_outline->pts[i].y/64.0);
+
+    auto curr_end = stroke_outline->ptsCnt;
+    auto inner_start = curr_end;
+
+    while(1){
+        for (auto i = 0; i < curr_end; i++){
+            while(1){
+                //compare every command in current stroke outline and next contour
+
+
+            }
+        }
+        if (curr_end == stroke_outline->ptsCnt) break;
+        else curr_end == stroke_outline->ptsCnt;
+    }
+
+
+
+    return true;
+}
+
 
 void shapeFree(SwShape* shape)
 {
@@ -634,6 +735,7 @@ bool shapeGenStrokeRle(SwShape* shape, const Shape* sdata, const Matrix* transfo
         }
         shapeOutline = shape->outline;
     }
+    strokeGenOutline(shape, sdata, transform);
 
     if (!strokeParseOutline(shape->stroke, *shapeOutline)) {
         ret = false;
