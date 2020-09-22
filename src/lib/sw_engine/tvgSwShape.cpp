@@ -440,15 +440,24 @@ bool _fastTrack(const SwOutline* outline)
     return false;
 }
 
-uint32_t _getIntersections(SwPoint* pts1, uint32_t i1, uint8_t type1, const Point* pts2, uint32_t i2, PathCommand type2, Point* inntersections, uint32_t intersection_cnt)
+
+uint32_t _intersect_line_line(const Point* pts1, const Point* pts2, Point* intersection)
+{
+    printf("line ");
+    return 0;
+}
+
+uint32_t _intersect_cubic_line(const Point* pts1, const Point* pts2, Point* intersection)
 {
 
     return 0;
 }
 
+uint32_t _intersect_cubic_cubic(const Point* pts1, const Point* pts2, Point* intersection)
+{
 
-
-
+    return 0;
+}
 
 /************************************************************************/
 /* External Class Implementation                                        */
@@ -581,7 +590,7 @@ bool shapeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transform
 
     //FIXME:
     //outline->flags = SwOutline::FillRule::Winding;
-
+    outline->fillMode;
     shape->outline = outline;
 
     return true;
@@ -597,127 +606,153 @@ bool strokeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transfor
 
     if (cmdCnt == 0 || ptsCnt == 0) return false;
 
-    //smart reservation
-    auto outlinePtsCnt = 0;
-    auto outlineCntrsCnt = 0;
+    PathCommand *outline_cmds = nullptr;
+    uint32_t alloc_cmds = cmdCnt;
+    outline_cmds = static_cast<PathCommand*>(calloc(alloc_cmds, sizeof(PathCommand)));
+    uint32_t outline_cmdsCnt = 0;
 
-    for (uint32_t i = 0; i < cmdCnt; ++i){
-        switch(*(cmds + i)) {
-            case PathCommand::Close: {
-                ++outlinePtsCnt;
-                break;
-            }
-            case PathCommand::MoveTo: {
-                ++outlineCntrsCnt;
-                ++outlinePtsCnt;
-                break;
-            }
-            case PathCommand::LineTo: {
-                ++outlinePtsCnt;
-                break;
-            }
-            case PathCommand::CubicTo: {
-                outlinePtsCnt += 3;
-                break;
-            }
-        }
-    }
-    ++outlinePtsCnt;
-    ++outlineCntrsCnt;
+    Point* outline_pts = nullptr;
+    uint32_t alloc_pts = ptsCnt;
+    outline_pts = static_cast<Point*>(calloc(alloc_pts, sizeof(Point)));
+    uint32_t outline_ptsCnt = 0;
 
-    auto outline = shape->stroke_outline;
-    if (!outline) outline = static_cast<SwOutline*>(calloc(1, sizeof(SwOutline)));
-    outline->opened = true;
-
-    _growOutlinePoint(*outline, outlinePtsCnt);
-    _growOutlineContour(*outline, outlineCntrsCnt);
-
-    // for (int i = 0; i < cmdCnt; i++){
-    //     printf("Cmd: %i, Point: %f %f\n", cmds[i], pts[i].x, pts[i].y);
-    // }
-
+    // copy first contour (up to first close command)
     auto closed = false;
-    // copy first contour into stroke_outline
-
-    //Generate Outlines
-    while (cmdCnt-- > 0) {
-        switch(*cmds) {
+    while (cmdCnt-- > 0){
+        outline_cmds[outline_cmdsCnt] = *cmds;
+        switch(*cmds){
             case PathCommand::Close: {
-                _outlineClose(*outline);
                 closed = true;
                 break;
             }
             case PathCommand::MoveTo: {
-                _outlineMoveTo(*outline, pts, transform);
-                ++pts;
+                outline_pts[outline_ptsCnt].x = pts[outline_ptsCnt].x;
+                outline_pts[outline_ptsCnt].y = pts[outline_ptsCnt].y;
+                outline_ptsCnt++;
                 break;
             }
             case PathCommand::LineTo: {
-                _outlineLineTo(*outline, pts, transform);
-                ++pts;
+                outline_pts[outline_ptsCnt].x = pts[outline_ptsCnt].x;
+                outline_pts[outline_ptsCnt].y = pts[outline_ptsCnt].y;
+                outline_ptsCnt++;
                 break;
             }
             case PathCommand::CubicTo: {
-                _outlineCubicTo(*outline, pts, pts + 1, pts + 2, transform);
-                pts += 3;
+                outline_pts[outline_ptsCnt].x = pts[outline_ptsCnt].x;
+                outline_pts[outline_ptsCnt].y = pts[outline_ptsCnt].y;
+                outline_pts[outline_ptsCnt+1].x = pts[outline_ptsCnt+1].x;
+                outline_pts[outline_ptsCnt+1].y = pts[outline_ptsCnt+1].y;
+                outline_pts[outline_ptsCnt+2].x = pts[outline_ptsCnt+2].x;
+                outline_pts[outline_ptsCnt+2].y = pts[outline_ptsCnt+2].y;
+                outline_ptsCnt+=3;
                 break;
             }
         }
+        ++outline_cmdsCnt;
         ++cmds;
-        if(closed) break;
+
+        if (closed) break;
     }
-    if (!closed) return false;
+    // cmds should point to first command after copied commands
 
-    uint32_t alloc_cnt = 2;
-    Point *intersections = static_cast<Point*>(calloc(alloc_cnt, sizeof(Point)));   // allocate for 2 intersections
-    uint32_t intersection_cnt = 0;
-    uint32_t temp;
-    // loop through stroke outline, after full loop, check if stroke outline changed, if it changed, loop again from start to new end
+    uint32_t alloc_intersection = 2;
+    Point* i_points1 = static_cast<Point*>(calloc(alloc_intersection, sizeof(Point)));
+    Point* i_points2 = static_cast<Point*>(calloc(alloc_intersection, sizeof(Point)));
+    uint32_t* i_cmds1 = static_cast<uint32_t*>(calloc(alloc_intersection, sizeof(uint32_t)));
+    uint32_t* i_cmds2 = static_cast<uint32_t*>(calloc(alloc_intersection, sizeof(uint32_t)));
+    Point intersection[9];
+    Point begin1, begin2;
+    begin1.x = pts[0].x;
+    begin1.y = pts[0].y;
+    while (outline_cmdsCnt-- > 0){
+        if(*(outline_cmds) == PathCommand::MoveTo){
+            ++outline_cmds;
+            continue;
+        }
+        const PathCommand *start = cmds;
+        uint32_t start_cnt = cmdCnt;
+        const Point* start_pts = pts;
+        begin2.x = start_pts[0].x;
+        begin2.y = start_pts[0].y;
+        while (start_cnt-- > 0){
+            if (*(start) == PathCommand::MoveTo){
+                ++start;
+                continue;
+            }
+            printf("compare ");
+            uint32_t intersectionCnt = 0;
 
-    uint32_t i1 = 1;
-    uint32_t limit1 = outline->ptsCnt;
-    uint8_t type1;
-    PathCommand type2;
-    while (i1 < limit1){
-        type1 = outline->types[i1];
-        uint32_t i2 = limit1 - 1;
-        uint32_t limit2 = ptsCnt;
-        while (i2 < limit2){
-            type2 = *(cmds + i2);
-            temp = intersection_cnt;
-            intersection_cnt = _getIntersections(outline->pts, i1, type1, pts, i2, type2, intersections, intersection_cnt);
-            printf("Sth ");
-            if (temp != intersection_cnt) {
-                printf("Found new intersections\n");
-
-
-            }else{
-                switch(type2){
-                    case PathCommand::Close:
-                        break;
-                    case PathCommand::LineTo:
-                        i2++;
-                        break;
-                    case PathCommand::MoveTo:
-                        i2++;
-                        break;
-                    case PathCommand::CubicTo:
-                        i2+=3;
-                        break;
+            switch(*start){
+                case PathCommand::Close:
+                    if (*(outline_cmds) == PathCommand::Close){
+                        Point temp[2]; temp[0] = *pts; temp[1] = begin2;
+                        intersectionCnt = _intersect_line_line(outline_pts, temp, intersection);
+                    }
+                    if (*(outline_cmds) == PathCommand::LineTo){
+                        Point temp[2]; temp[0] = *pts; temp[1] = begin2;
+                        intersectionCnt = _intersect_line_line(outline_pts, temp, intersection);
+                    }
+                    if (*(outline_cmds) == PathCommand::CubicTo){
+                        Point temp[2]; temp[0] = *pts; temp[1] = begin2;
+                        intersectionCnt = _intersect_cubic_line(outline_pts, temp, intersection);
+                    }
+                    break;
+                case PathCommand::MoveTo:
+                    ++start_pts;
+                    break;
+                case PathCommand::LineTo: {
+                    if (*(outline_cmds) == PathCommand::Close){
+                        Point temp[2]; temp[0] = *outline_pts; temp[1] = begin1;
+                        intersectionCnt = _intersect_line_line(temp, pts, intersection);
+                    }
+                    if (*(outline_cmds) == PathCommand::LineTo){
+                        intersectionCnt = _intersect_line_line(outline_pts, pts, intersection);
+                    }
+                    if (*(outline_cmds) == PathCommand::CubicTo){
+                        intersectionCnt = _intersect_cubic_line(outline_pts, pts, intersection);
+                    }
+                    ++start_pts;
+                    break;
+                }
+                case PathCommand::CubicTo: {
+                    if (*(outline_cmds) == PathCommand::Close){
+                        Point temp[2]; temp[0] = *outline_pts; temp[1] = begin1;
+                        intersectionCnt = _intersect_cubic_line(pts, outline_pts, intersection);
+                    }
+                    if (*(outline_cmds) == PathCommand::LineTo){
+                        intersectionCnt = _intersect_cubic_line(pts, outline_pts, intersection);
+                    }
+                    if (*(outline_cmds) == PathCommand::CubicTo){
+                        intersectionCnt = _intersect_cubic_cubic(pts, outline_pts, intersection);
+                    }
+                    start_pts+=3;
+                    break;
                 }
             }
+            ++start;
         }
         printf("\n");
-        switch(type1){
-            case 0:
-                i1++;
+        switch(*outline_cmds){
+            case PathCommand::Close: {
+                // make changes to paths i.e
+                // add new points (split paths)
+                // check which points are outside
+                // start iterating over new outline to compare with next contour
+                // add check if close, if not copy without doing anything (I guess?)
                 break;
-            case 1:
-                i1+=3;
+            }
+            case PathCommand::MoveTo:
+                outline_pts++;
+                break;
+            case PathCommand::LineTo:
+                outline_pts++;
+                break;
+            case PathCommand::CubicTo:
+                outline_pts+=3;
                 break;
         }
+        ++outline_cmds;
     }
-
     return true;
 }
 
