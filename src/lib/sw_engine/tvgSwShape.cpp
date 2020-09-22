@@ -440,6 +440,15 @@ bool _fastTrack(const SwOutline* outline)
     return false;
 }
 
+uint32_t _getIntersections(SwPoint* pts1, uint32_t i1, uint8_t type1, const Point* pts2, uint32_t i2, PathCommand type2, Point* inntersections, uint32_t intersection_cnt)
+{
+
+    return 0;
+}
+
+
+
+
 
 /************************************************************************/
 /* External Class Implementation                                        */
@@ -629,10 +638,10 @@ bool strokeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transfor
 
     auto closed = false;
     // copy first contour into stroke_outline
-    auto cmdCnt_copy = cmdCnt;
-    uint32_t i = 0;
-    while (cmdCnt_copy-- > 0){
-        switch(*(cmds + i)) {
+
+    //Generate Outlines
+    while (cmdCnt-- > 0) {
+        switch(*cmds) {
             case PathCommand::Close: {
                 _outlineClose(*outline);
                 closed = true;
@@ -654,62 +663,61 @@ bool strokeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transfor
                 break;
             }
         }
-        ++i;
-        if (closed) break;
+        ++cmds;
+        if(closed) break;
     }
     if (!closed) return false;
-    for (int i = 0; i < outline->ptsCnt; i++)
-        printf("Type: %u, %f %f\n", outline->types[i], outline->pts[i].x/64.0, outline->pts[i].y/64.0);
 
-    uint32_t limit1 = outline->ptsCnt;
+    uint32_t alloc_cnt = 2;
+    Point *intersections = static_cast<Point*>(calloc(alloc_cnt, sizeof(Point)));   // allocate for 2 intersections
+    uint32_t intersection_cnt = 0;
+    uint32_t temp;
+    // loop through stroke outline, after full loop, check if stroke outline changed, if it changed, loop again from start to new end
+
     uint32_t i1 = 1;
-    Point p;
+    uint32_t limit1 = outline->ptsCnt;
+    uint8_t type1;
+    PathCommand type2;
     while (i1 < limit1){
-        uint32_t i2 = limit1;
-        if (outline->types[i1-1] == 0){
-            switch(outline->types[i1]){
-                case 0:
-                    printf("Line ");
-                    printf("From (%f, %f) to (%f, %f)\n", outline->pts[i1-1].x/64.0, outline->pts[i1-1].y/64.0, outline->pts[i1].x/64.0, outline->pts[i1].y/64.0);
-                    i1++;
-                    break;
-                case 1:
-                    printf("Curve ");
-                    printf("From (%f, %f), Ctrl1 (%f, %f), Ctrl2 (%f, %f), End (%f, %f)\n", outline->pts[i1-1].x/64.0, outline->pts[i1-1].y/64.0,
-                    outline->pts[i1].x/64.0, outline->pts[i1].y/64.0, outline->pts[i1+1].x/64.0, outline->pts[i1+1].y/64.0, outline->pts[i1+2].x/64.0, outline->pts[i1+2].y/64.0);
-                    i1+=3;
-                    break;
-                default:
-                    printf("Dunno what\n");
-                    break;
+        type1 = outline->types[i1];
+        uint32_t i2 = limit1 - 1;
+        uint32_t limit2 = ptsCnt;
+        while (i2 < limit2){
+            type2 = *(cmds + i2);
+            temp = intersection_cnt;
+            intersection_cnt = _getIntersections(outline->pts, i1, type1, pts, i2, type2, intersections, intersection_cnt);
+            printf("Sth ");
+            if (temp != intersection_cnt) {
+                printf("Found new intersections\n");
+
+
+            }else{
+                switch(type2){
+                    case PathCommand::Close:
+                        break;
+                    case PathCommand::LineTo:
+                        i2++;
+                        break;
+                    case PathCommand::MoveTo:
+                        i2++;
+                        break;
+                    case PathCommand::CubicTo:
+                        i2+=3;
+                        break;
+                }
             }
         }
-        while(1){
-            Point current;
-            current.x = pts[i2].x;
-            current.y = pts[i2].y;
-            if (i2-1 == cmdCnt) break;  // for safety
-            switch (*(cmds + i2)){
-                case PathCommand::Close:
-                    printf("close\n");
-                    break;
-                case PathCommand::MoveTo:
-                    printf("Move to\n");
-                    break;
-                case PathCommand::LineTo:
-                    printf("Line to\n");
-                    break;
-                case PathCommand::CubicTo:
-                    printf("Cubic to\n");
-                    break;
-            }
-            ++i2;
+        printf("\n");
+        switch(type1){
+            case 0:
+                i1++;
+                break;
+            case 1:
+                i1+=3;
+                break;
         }
-        // if (i1-1 == limit1 && limit1 != outline->ptsCnt) {
-        //     limit1 = outline->ptsCnt;
-        //     i1 = 1;
-        // }
     }
+
     return true;
 }
 
