@@ -616,66 +616,100 @@ bool strokeGenOutline(SwShape* shape, const Shape* sdata, const Matrix* transfor
     ++outlinePtsCnt;
     ++outlineCntrsCnt;
 
-    auto stroke_outline = shape->stroke_outline;
-    if (!stroke_outline) stroke_outline = static_cast<SwOutline*>(calloc(1, sizeof(SwOutline)));
-    stroke_outline->opened = true;
+    auto outline = shape->stroke_outline;
+    if (!outline) outline = static_cast<SwOutline*>(calloc(1, sizeof(SwOutline)));
+    outline->opened = true;
 
-    _growOutlinePoint(*stroke_outline, outlinePtsCnt);
-    _growOutlineContour(*stroke_outline, outlineCntrsCnt);
+    _growOutlinePoint(*outline, outlinePtsCnt);
+    _growOutlineContour(*outline, outlineCntrsCnt);
 
-    for (int i = 0; i < cmdCnt; i++){
-        printf("Cmd: %i, Point: %f %f\n", cmds[i], pts[i].x, pts[i].y);
-    }
+    // for (int i = 0; i < cmdCnt; i++){
+    //     printf("Cmd: %i, Point: %f %f\n", cmds[i], pts[i].x, pts[i].y);
+    // }
 
     auto closed = false;
     // copy first contour into stroke_outline
-    while (cmdCnt-- > 0){
-        switch(*cmds) {
+    auto cmdCnt_copy = cmdCnt;
+    uint32_t i = 0;
+    while (cmdCnt_copy-- > 0){
+        switch(*(cmds + i)) {
             case PathCommand::Close: {
-                _outlineClose(*stroke_outline);
+                _outlineClose(*outline);
                 closed = true;
                 break;
             }
             case PathCommand::MoveTo: {
-                _outlineMoveTo(*stroke_outline, pts, transform);
+                _outlineMoveTo(*outline, pts, transform);
                 ++pts;
                 break;
             }
             case PathCommand::LineTo: {
-                _outlineLineTo(*stroke_outline, pts, transform);
+                _outlineLineTo(*outline, pts, transform);
                 ++pts;
                 break;
             }
             case PathCommand::CubicTo: {
-                _outlineCubicTo(*stroke_outline, pts, pts + 1, pts + 2, transform);
+                _outlineCubicTo(*outline, pts, pts + 1, pts + 2, transform);
                 pts += 3;
                 break;
             }
         }
-        ++cmds;
+        ++i;
         if (closed) break;
     }
     if (!closed) return false;
-    for (int i = 0; i < stroke_outline->ptsCnt; i++)
-        printf("%f %f\n", stroke_outline->pts[i].x/64.0, stroke_outline->pts[i].y/64.0);
+    for (int i = 0; i < outline->ptsCnt; i++)
+        printf("Type: %u, %f %f\n", outline->types[i], outline->pts[i].x/64.0, outline->pts[i].y/64.0);
 
-    auto curr_end = stroke_outline->ptsCnt;
-    auto inner_start = curr_end;
-
-    while(1){
-        for (auto i = 0; i < curr_end; i++){
-            while(1){
-                //compare every command in current stroke outline and next contour
-
-
+    uint32_t limit1 = outline->ptsCnt;
+    uint32_t i1 = 1;
+    Point p;
+    while (i1 < limit1){
+        uint32_t i2 = limit1;
+        if (outline->types[i1-1] == 0){
+            switch(outline->types[i1]){
+                case 0:
+                    printf("Line ");
+                    printf("From (%f, %f) to (%f, %f)\n", outline->pts[i1-1].x/64.0, outline->pts[i1-1].y/64.0, outline->pts[i1].x/64.0, outline->pts[i1].y/64.0);
+                    i1++;
+                    break;
+                case 1:
+                    printf("Curve ");
+                    printf("From (%f, %f), Ctrl1 (%f, %f), Ctrl2 (%f, %f), End (%f, %f)\n", outline->pts[i1-1].x/64.0, outline->pts[i1-1].y/64.0,
+                    outline->pts[i1].x/64.0, outline->pts[i1].y/64.0, outline->pts[i1+1].x/64.0, outline->pts[i1+1].y/64.0, outline->pts[i1+2].x/64.0, outline->pts[i1+2].y/64.0);
+                    i1+=3;
+                    break;
+                default:
+                    printf("Dunno what\n");
+                    break;
             }
         }
-        if (curr_end == stroke_outline->ptsCnt) break;
-        else curr_end == stroke_outline->ptsCnt;
+        while(1){
+            Point current;
+            current.x = pts[i2].x;
+            current.y = pts[i2].y;
+            if (i2-1 == cmdCnt) break;  // for safety
+            switch (*(cmds + i2)){
+                case PathCommand::Close:
+                    printf("close\n");
+                    break;
+                case PathCommand::MoveTo:
+                    printf("Move to\n");
+                    break;
+                case PathCommand::LineTo:
+                    printf("Line to\n");
+                    break;
+                case PathCommand::CubicTo:
+                    printf("Cubic to\n");
+                    break;
+            }
+            ++i2;
+        }
+        // if (i1-1 == limit1 && limit1 != outline->ptsCnt) {
+        //     limit1 = outline->ptsCnt;
+        //     i1 = 1;
+        // }
     }
-
-
-
     return true;
 }
 
