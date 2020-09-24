@@ -88,6 +88,8 @@ Result Shape::appendPath(const PathCommand *cmds, uint32_t cmdCnt, const Point* 
 
     pImpl->flag |= RenderUpdateFlag::Path;
 
+    pImpl->stencil(*(pImpl->path)); //TODO: we need different approach here
+
     return Result::Success;
 }
 
@@ -125,7 +127,7 @@ Result Shape::cubicTo(float cx1, float cy1, float cx2, float cy2, float x, float
 Result Shape::close() noexcept
 {
     pImpl->path->close();
-
+    pImpl->stencil(*(pImpl->path));
     pImpl->flag |= RenderUpdateFlag::Path;
 
     return Result::Success;
@@ -144,6 +146,7 @@ Result Shape::appendCircle(float cx, float cy, float rx, float ry) noexcept
     pImpl->path->cubicTo(cx - rxKappa, cy + ry, cx - rx, cy + ryKappa, cx - rx, cy);
     pImpl->path->cubicTo(cx - rx, cy - ryKappa, cx - rxKappa, cy - ry, cx, cy - ry);
     pImpl->path->close();
+    pImpl->stencil(*(pImpl->path));
 
     pImpl->flag |= RenderUpdateFlag::Path;
 
@@ -207,6 +210,7 @@ Result Shape::appendArc(float cx, float cy, float radius, float startAngle, floa
     if (pie) {
         pImpl->path->moveTo(cx, cy);
         pImpl->path->close();
+        pImpl->stencil(*(pImpl->path));
     }
 
     pImpl->flag |= RenderUpdateFlag::Path;
@@ -232,6 +236,7 @@ Result Shape::appendRect(float x, float y, float w, float h, float rx, float ry)
         pImpl->path->lineTo(x + w, y + h);
         pImpl->path->lineTo(x, y + h);
         pImpl->path->close();
+        pImpl->stencil(*(pImpl->path));
     //circle
     } else if (fabsf(rx - halfW) < FLT_EPSILON && fabsf(ry - halfH) < FLT_EPSILON) {
         return appendCircle(x + (w * 0.5f), y + (h * 0.5f), rx, ry);
@@ -249,6 +254,7 @@ Result Shape::appendRect(float x, float y, float w, float h, float rx, float ry)
         pImpl->path->lineTo(x, y + ry);
         pImpl->path->cubicTo(x, y + ry - hry, x + rx - hrx, y, x + rx, y);
         pImpl->path->close();
+        pImpl->stencil(*(pImpl->path));
     }
 
     pImpl->flag |= RenderUpdateFlag::Path;
