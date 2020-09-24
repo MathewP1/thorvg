@@ -29,34 +29,6 @@
 /* Internal Class Implementation                                        */
 /************************************************************************/
 
-struct ShapeStroke
-{
-    float width = 0;
-    uint8_t color[4] = {0, 0, 0, 0};
-    float* dashPattern = nullptr;
-    uint32_t dashCnt = 0;
-    StrokeCap cap = StrokeCap::Square;
-    StrokeJoin join = StrokeJoin::Bevel;
-
-    ShapeStroke() {}
-
-    ShapeStroke(const ShapeStroke* src)
-    {
-        width = src->width;
-        dashCnt = src->dashCnt;
-        cap = src->cap;
-        join = src->join;
-        memcpy(color, src->color, sizeof(color));
-        dashPattern = static_cast<float*>(malloc(sizeof(float) * dashCnt));
-        memcpy(dashPattern, src->dashPattern, sizeof(float) * dashCnt);
-    }
-
-    ~ShapeStroke()
-    {
-        if (dashPattern) free(dashPattern);
-    }
-};
-
 
 struct ShapePath
 {
@@ -189,6 +161,111 @@ struct ShapePath
     }
 };
 
+struct StrokeStencil
+{
+    // thats stroke stencil (outline)
+    ShapePath* stencil = nullptr;
+
+    // copy of contour we are trying to add to stroke stencil
+    // needed to help with looking for intersections and splitting paths
+    // t - temp
+    ShapePath* t_stencil = nullptr;
+
+    // copy first contour (up to first close) to stencil
+    // copy everything else (if it exists - it should only exist if shape is added
+    // with svg path, otherwise we update stencil after every close cmd) to temp stencil
+    StrokeStencil(ShapePath& first)
+    {
+        stencil = new ShapePath(first);
+    }
+    void Update(ShapePath& src)
+    {
+        // find last contour (between last and previous to last close cmds)
+        PathCommand* i_cmds; Point* i_pts;
+        i_cmds = src.cmds;
+        uint32_t cnt = src.cmdCnt;
+
+        while(cnt-- > 0){
+            if ((src.cmds)[cnt - 1] == PathCommand::Close)
+            {
+                i_cmds = src.cmds + cnt;
+            }
+
+            switch(*i_cmds){
+                case PathCommand::MoveTo: {
+
+                    break;
+                }
+                case PathCommand::LineTo: {
+
+                    break;
+                }
+                case PathCommand::CubicTo: {
+
+                    break;
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+        // for (uint32_t i = 0; i < stencil->cmdCnt; i++){
+        //     printf("Cmd: %u\n", stencil->cmds[i]);
+        // }
+        // printf("\n");
+
+        // for (uint32_t i = 0; i < t_stencil->cmdCnt; i++){
+        //     printf("Cmd: %u\n", t_stencil->cmds[i]);
+        // }
+    }
+    ~StrokeStencil()
+    {
+        if (stencil) delete(stencil);
+        if (t_stencil) delete(t_stencil);
+    }
+
+
+};
+
+struct ShapeStroke
+{
+    StrokeStencil* stencil = nullptr;
+
+    float width = 0;
+    uint8_t color[4] = {0, 0, 0, 0};
+    float* dashPattern = nullptr;
+    uint32_t dashCnt = 0;
+    StrokeCap cap = StrokeCap::Square;
+    StrokeJoin join = StrokeJoin::Bevel;
+
+    ShapeStroke() {}
+
+    ShapeStroke(const ShapeStroke* src)
+    {
+        width = src->width;
+        dashCnt = src->dashCnt;
+        cap = src->cap;
+        join = src->join;
+        memcpy(color, src->color, sizeof(color));
+        dashPattern = static_cast<float*>(malloc(sizeof(float) * dashCnt));
+        memcpy(dashPattern, src->dashPattern, sizeof(float) * dashCnt);
+    }
+
+    ~ShapeStroke()
+    {
+        if (dashPattern) free(dashPattern);
+        // if (stencil) delete(stencil);
+    }
+};
+
 
 struct Shape::Impl
 {
@@ -244,6 +321,19 @@ struct Shape::Impl
         stroke->width = width;
         flag |= RenderUpdateFlag::Stroke;
 
+        return true;
+    }
+
+    bool stencil(ShapePath& src)
+    {
+        if (!stroke) stroke = new ShapeStroke();
+        if (!stroke) return false;
+
+        if (!stroke->stencil) stroke->stencil = new StrokeStencil(src);
+        else {
+            // update stencil with new shape
+            stroke->stencil->Update(src);
+        }
         return true;
     }
 
