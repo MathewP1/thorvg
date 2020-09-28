@@ -183,7 +183,21 @@ struct StrokeStencil
     // with svg path, otherwise we update stencil after every close cmd) to temp stencil
     StrokeStencil(ShapePath& first)
     {
-        stencil = new ShapePath(first);
+        // stencil = new ShapePath(first);
+
+        // stencil->cmdCnt = first->cmdCnt;
+        // stencil->ptsCnt = first->ptsCnt;
+        // stencil->reserveCmd(first->cmdCnt);
+        // stencil->reservePts(first->ptsCnt);
+        // memcpy(stencil->cmds, first->cmds, sizeof(PathCommand) * first->cmdCnt);
+        // memcpy(stencil->pts, first->pts, sizeof(Point) * first->ptsCnt);
+        stencil = new ShapePath();
+        stencil->cmdCnt = first.cmdCnt;
+        stencil->ptsCnt = first.ptsCnt;
+        stencil->reserveCmd(first.cmdCnt);
+        stencil->reservePts(first.ptsCnt);
+        memcpy(stencil->cmds, first.cmds, sizeof(PathCommand) * first.cmdCnt);
+        memcpy(stencil->pts, first.pts, sizeof(Point) * first.ptsCnt);
         t_stencil = new ShapePath();
         all_intersections = nullptr;
     }
@@ -223,11 +237,11 @@ struct StrokeStencil
             // printf("Cmd: %u\n", stencil->cmds[i_outer]);
             if (outer_cmd == PathCommand::Close || outer_cmd == PathCommand::LineTo){
                 getPoints(*stencil, i_outer, i_outer_pts, outer_line);
-                i_outer_pts++;
+                // i_outer_pts++;
             }
             if (outer_cmd == PathCommand::CubicTo){
                 getPoints(*stencil, i_outer, i_outer_pts, outer_cubic);
-                i_outer_pts+=3;
+                // i_outer_pts+=3;
             }
 
             do{
@@ -241,11 +255,11 @@ struct StrokeStencil
                 // printf("Cmd inner: %u\n", t_stencil->cmds[i_inner]);
                 if (inner_cmd == PathCommand::Close || inner_cmd == PathCommand::LineTo){
                     getPoints(*t_stencil, i_inner, i_inner_pts, inner_line);
-                    i_inner_pts++;
+                    // i_inner_pts++;
                 }
                 if (inner_cmd == PathCommand::CubicTo){
                     getPoints(*t_stencil, i_inner, i_inner_pts, inner_cubic);
-                    i_inner_pts+=3;
+                    // i_inner_pts+=3;
                 }
 
                 // look for intersections
@@ -258,7 +272,7 @@ struct StrokeStencil
                     printf("Comparing line (%f %f) (%f %f) with line (%f %f) (%f %f)\n",
                                 outer_line[0].x, outer_line[0].y, outer_line[1].x, outer_line[1].y,
                                 inner_line[0].x, inner_line[0].y, inner_line[1].x, inner_line[1].y);
-                    num_intersections = getLineLineIntersection(outer_line, inner_line, intersections);
+                    num_intersections = getSegmentSegmentIntersection(outer_line, inner_line, intersections);
                 }
                 // line cubic
                 if ((outer_cmd == PathCommand::Close || outer_cmd == PathCommand::LineTo)
@@ -285,13 +299,30 @@ struct StrokeStencil
                     printf("***Found %u intersections\n", num_intersections);
                     addIntersections(intersections, num_intersections, i_inner, i_outer, i_inner_pts, i_outer_pts);
                 }
+
+                if (inner_cmd == PathCommand::Close || inner_cmd == PathCommand::LineTo){
+                    i_inner_pts++;
+                }
+                if (inner_cmd == PathCommand::CubicTo){
+                    i_inner_pts+=3;
+                }
+
             }while(++i_inner < t_stencil->cmdCnt);
+            if (outer_cmd == PathCommand::Close || outer_cmd == PathCommand::LineTo){
+                i_outer_pts++;
+            }
+            if (outer_cmd == PathCommand::CubicTo){
+                i_outer_pts+=3;
+            }
         }while(++i_outer < stencil->cmdCnt);
 
         for (uint32_t i = 0; i < num_all_intersections; i++){
-            printf("Intersection at: (%f, %f), cmd outer: %u, cmd inner: %u\n", all_intersections[i].p.x, all_intersections[i].p.y, all_intersections[i].outer, all_intersections[i].inner);
+            printf("Intersection at: (%f, %f), cmd outer: %u, cmd inner: %u ", all_intersections[i].p.x, all_intersections[i].p.y, all_intersections[i].outer, all_intersections[i].inner);
+            printf("Point num inner: %u, Point num outer: %u\n", all_intersections[i].inner_pts, all_intersections[i].outer_pts);
         }
-        _rebuildPath();
+        _addIntersections();
+        // TODO: add case for no intersections
+        _findOutline();
 
     }
 
@@ -299,9 +330,11 @@ private:
     Intersection* all_intersections;
     uint32_t num_all_intersections = 0;
     uint32_t alloc_intersections = 4;
-    void _splitLine(ShapePath& path, uint32_t cmd_num, uint32_t pts_num, Point p)
+
+    void _splitLine(ShapePath& path, uint32_t cmd_num, uint32_t pts_num, Point p, uint32_t& offset, uint32_t& pts_offset)
     {
-        // TODO: sth wrong with memmove
+        // TODO: cant index with numbers, i.e cmd_num, pts_num, array size keep changing... do something with this....
+        // maybe just add some offset? if we are going along path in order, just keep increasing offset by 1 for line, 3 for cubic?
         printf("Before line split: \n");
         for( uint32_t i = 0; i < path.cmdCnt; i++){
             printf("Cmd: %u\n", path.cmds[i]);
@@ -309,15 +342,32 @@ private:
         for (uint32_t i = 0; i < path.ptsCnt; i++){
             printf("Point: (%f %f)\n", path.pts[i].x, path.pts[i].y);
         }
+        auto src_num = cmd_num + offset;
+        auto dst_num = src_num + 1;
+        auto size = path.cmdCnt - (cmd_num + offset);
+        printf("Copy from: %u, to %u, size: %u\n", src_num, dst_num, size);
         path.cmdCnt++;
         path.reserveCmd(path.cmdCnt);
-        memmove(&path.cmds[cmd_num] + 1, &path.cmds[cmd_num], sizeof(PathCommand) * (path.cmdCnt - cmd_num));
-        path.cmds[cmd_num] = PathCommand::CubicTo;
+        memmove(path.cmds + dst_num, path.cmds + src_num, sizeof(PathCommand) * size);
+        path.cmds[cmd_num+offset] = PathCommand::LineTo;
 
-        path.ptsCnt++;
-        path.reservePts(path.ptsCnt);
-        memmove(&path.pts[pts_num] + 1, &path.pts[pts_num], sizeof(Point*) * (path.ptsCnt - pts_num));
-        path.pts[pts_num] = {999999, 9999999};
+        // if last point
+        if (pts_num + pts_offset != path.ptsCnt){
+            auto p_src_num = pts_num + offset + 1;
+            auto p_dst_num = p_src_num + 1;
+            auto p_size = path.ptsCnt - (pts_num + offset + 1);
+            printf("Copy point from: %u, to: %u, size: %u\n", p_src_num, p_dst_num, p_size);
+            path.ptsCnt++;
+            path.reservePts(path.ptsCnt);
+            memmove(path.pts + p_dst_num, path.pts + p_src_num, sizeof(Point) * p_size);
+            path.pts[pts_num + pts_offset + 1] = {p.x, p.y};
+        } else {
+            path.ptsCnt++;
+            path.reservePts(path.ptsCnt);
+            path.pts[pts_num + pts_offset + 1] = {p.x, p.y};
+        }
+
+
         printf("After line split: \n");
         for( uint32_t i = 0; i < path.cmdCnt; i++){
             printf("Cmd: %u\n", path.cmds[i]);
@@ -325,26 +375,85 @@ private:
         for (uint32_t i = 0; i < path.ptsCnt; i++){
             printf("Point: (%f %f)\n", path.pts[i].x, path.pts[i].y);
         }
+        offset++;
+        pts_offset++;
     }
 
-    void _rebuildPath()
+    void _findOutline()
     {
-        while (num_all_intersections-- > 0)
-        {
-            switch(stencil->cmds[all_intersections->inner]){
-                case PathCommand::LineTo: {
-                    _splitLine(*t_stencil, all_intersections->inner, all_intersections->inner_pts, all_intersections->p);
-                    break;
-                }
-            }
-            switch(t_stencil->cmds[all_intersections->outer]){
-                case PathCommand::LineTo: {
-                    _splitLine(*stencil, all_intersections->outer, all_intersections->outer_pts, all_intersections->p);
-                    break;
-                }
-            }
-            ++all_intersections;
+        ShapePath* outline = new ShapePath();
+        outline->ptsCnt = 0; outline->cmdCnt = 0;
+        outline->reservePts(stencil->ptsCnt + t_stencil->ptsCnt);
+        outline->reserveCmd(stencil->cmdCnt + t_stencil->cmdCnt);
+
+        uint32_t i_stencil = 0; uint32_t i_pts_stencil = 0;
+        uint32_t i_t_stencil = 0; uint32_t i_pts_t_stencil = 0;
+        uint32_t i_outline = 0; uint32_t i_pts_outline = 0;
+
+        uint32_t& i = i_stencil;
+        uint32_t& i_pts = i_pts_stencil;
+        uint32_t i_max = stencil->cmdCnt;
+
+        ShapePath *current = stencil;
+        ShapePath *other = t_stencil;
+        bool start = false;
+
+        // find first point on the outline
+        while(i < i_max){
+
+
         }
+    }
+
+    bool _isInside(ShapePath* path, Point& p)
+    {
+        uint32_t i, i_pts;
+        i = i_pts = 0;
+        uint32_t num = 0;
+        Point p_line[2], line[2];
+        line[0] = {0, 0}; line[1] = {p.x, p.y};
+        auto cnt = path->cmdCnt;
+        bool overlap = false;
+
+        while (cnt-- > 0){
+            if (!(path->cmds[i] == PathCommand::MoveTo)){
+                if (path->cmds[i] == PathCommand::LineTo || path->cmds[i] == PathCommand::Close)
+                    getPoints(*path, i, i_pts, p_line);
+                    if (getLineSegmentIntersection(line, p_line, overlap)) num++;   // TODO: check check segment-segment, otherwise method doesn't work
+                else{
+                    // TODO: add for cubic
+                }
+            }
+            i++;
+        }
+
+        return num%2 == 0;
+    }
+
+    void _addIntersections()
+    {
+        uint32_t inner_offset, inner_pts_offset, outer_offset, outer_pts_offset;
+        inner_offset = inner_pts_offset = outer_offset = outer_pts_offset = 0;
+        auto inter = all_intersections;
+        auto i = num_all_intersections;
+        while (i-- > 0)
+        {
+            switch(t_stencil->cmds[inter->inner]){
+                case PathCommand::LineTo: {
+                    _splitLine(*t_stencil, inter->inner, inter->inner_pts, inter->p, inner_offset, inner_pts_offset);
+                    break;
+                }
+            }
+            switch(stencil->cmds[inter->outer]){
+                case PathCommand::LineTo: {
+                    _splitLine(*stencil, inter->outer, inter->outer_pts, inter->p, outer_offset, outer_pts_offset);
+                    break;
+                }
+            }
+            ++inter;
+        }
+
+        free(all_intersections);
     }
     void _getLineEquation(Point &p1, Point &p2, float &a, float &b, float &c)
     {
@@ -353,7 +462,7 @@ private:
         c = a * p1.x + b * p1.y;
     }
 
-    bool _LineLine(Point &p1, Point &p2, Point &p3, Point &p4, Intersection &p, bool &overlap)
+    bool _SegmentSegment(Point &p1, Point &p2, Point &p3, Point &p4, Intersection &p, bool &overlap)
     {
         overlap = false;
         float a1, b1, c1, a2, b2, c2;
@@ -396,10 +505,39 @@ private:
         }
     }
 
-    uint32_t getLineLineIntersection(Point* line1, Point* line2, Intersection* intersection)
+    bool getLineSegmentIntersection(Point* line1, Point* segment, bool& overlap)
+    {
+        // overlap = false;
+        // float a1, b1, c1, a2, b2, c2;
+        // Point p;
+        // _getLineEquation(line1[0], line1[1], a1, b1, c1);
+        // _getLineEquation(segment[0], segment[1], a2, b2, c2);
+        // float det = a1*b2 - a2*b1;
+        // if (abs(det) < FLT_EPSILON){  //lines are parallel, check for overlap
+        //     float det1 = a1*c2 - a2*c1;
+        //     float det2 = b1*c2 - b2*c1;
+        //     if (abs(det1) < FLT_EPSILON && abs(det2) < FLT_EPSILON){
+        //         overlap = true;
+        //         return true;
+        //     } else return false;
+        // }
+        // p.x = (c1*b2 - c2*b1)/det;
+        // // check if point lies on the segment
+        // if ((min(segment[0].x, segment[1].x) <= p.x) && (p.x <= max(segment[0].x, segment[1].x))){
+        //     p.y = (a1*c2 - a2*c1)/det;
+        //     if ((min(segment[0].y, segment[1].y) <= p.y) && (p.y <= max(segment[0].y, segment[1].y))){
+        //         return true;
+        //     }
+        // }
+        // return false;
+        
+
+    }
+
+    uint32_t getSegmentSegmentIntersection(Point* line1, Point* line2, Intersection* intersection)
     {
         bool overlap, result;
-        result = _LineLine(line1[0], line1[1], line2[0], line2[1], *intersection, overlap);
+        result = _SegmentSegment(line1[0], line1[1], line2[0], line2[1], *intersection, overlap);
         if (result) return 1;
         return 0;
     }
@@ -462,13 +600,13 @@ private:
     void copyContour(ShapePath& src)
     {
         // find last contour (between last and previous to last close cmds)
-        printf("In StrokeStencil::Update\n\n");
-        for (uint32_t i = 0; i < src.cmdCnt; i++){
-            printf("Cmd: %u\n", src.cmds[i]);
-        }
+        // printf("In StrokeStencil::Update\n\n");
+        // for (uint32_t i = 0; i < src.cmdCnt; i++){
+        //     printf("Cmd: %u\n", src.cmds[i]);
+        // }
 
-        printf("Cmdcnt: %u\n", src.cmdCnt);
-        printf("PtsCnt: %u\n", src.ptsCnt);
+        // printf("Cmdcnt: %u\n", src.cmdCnt);
+        // printf("PtsCnt: %u\n", src.ptsCnt);
         int i = src.cmdCnt - 2; // start looping at previus to last, last cmd should be close
         int i_pts = src.ptsCnt;
         while(i - 1 >= 0){
@@ -499,23 +637,23 @@ private:
         memcpy(t_stencil->cmds, src.cmds + i, sizeof(PathCommand) * (src.cmdCnt - i));
         memcpy(t_stencil->pts, src.pts + i_pts, sizeof(Point) * (src.ptsCnt - i_pts));
 
-        printf("All commands: \n");
-        for (uint32_t i = 0; i < src.cmdCnt; i++){
-            printf("cmd: %u\n", src.cmds[i]);
-        }
-        printf("All points:\n");
-        for (uint32_t i = 0; i < src.ptsCnt; i++){
-            printf("point: (%f %f)\n", src.pts[i].x, src.pts[i].y);
-        }
-        printf("\n\n");
-        printf("Copied commands\n");
-        for (uint32_t i = 0; i < t_stencil->cmdCnt; i++){
-            printf("cmd: %u\n", t_stencil->cmds[i]);
-        }
-        printf("Copied points\n");
-        for (uint32_t i = 0; i < t_stencil->ptsCnt; i++){
-            printf("Point: (%f %f)\n", t_stencil->pts[i].x, t_stencil->pts[i].y);
-        }
+        // printf("All commands: \n");
+        // for (uint32_t i = 0; i < src.cmdCnt; i++){
+        //     printf("cmd: %u\n", src.cmds[i]);
+        // }
+        // printf("All points:\n");
+        // for (uint32_t i = 0; i < src.ptsCnt; i++){
+        //     printf("point: (%f %f)\n", src.pts[i].x, src.pts[i].y);
+        // }
+        // printf("\n\n");
+        // printf("Copied commands\n");
+        // for (uint32_t i = 0; i < t_stencil->cmdCnt; i++){
+        //     printf("cmd: %u\n", t_stencil->cmds[i]);
+        // }
+        // printf("Copied points\n");
+        // for (uint32_t i = 0; i < t_stencil->ptsCnt; i++){
+        //     printf("Point: (%f %f)\n", t_stencil->pts[i].x, t_stencil->pts[i].y);
+        // }
     }
 };
 
