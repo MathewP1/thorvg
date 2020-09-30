@@ -6,6 +6,7 @@ source_file = [
     'testBlending.cpp',
     'testBoundary.cpp',
     'testCapi.cpp',
+    'testCapiFill.cpp',
     'testCustomTransform.cpp',
     'testDirectUpdate.cpp',
     'testDuplicate.cpp',
