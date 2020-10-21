@@ -269,30 +269,30 @@ struct StrokeStencil
                 // line line
                 if ((outer_cmd == PathCommand::Close || outer_cmd == PathCommand::LineTo)
                     && (inner_cmd == PathCommand::Close || inner_cmd == PathCommand::LineTo)){
-                    printf("Comparing line (%f %f) (%f %f) with line (%f %f) (%f %f)\n",
-                                outer_line[0].x, outer_line[0].y, outer_line[1].x, outer_line[1].y,
-                                inner_line[0].x, inner_line[0].y, inner_line[1].x, inner_line[1].y);
+                    // printf("Comparing line (%f %f) (%f %f) with line (%f %f) (%f %f)\n",
+                    //             outer_line[0].x, outer_line[0].y, outer_line[1].x, outer_line[1].y,
+                    //             inner_line[0].x, inner_line[0].y, inner_line[1].x, inner_line[1].y);
                     num_intersections = getSegmentSegmentIntersection(outer_line, inner_line, intersections);
                 }
                 // line cubic
                 if ((outer_cmd == PathCommand::Close || outer_cmd == PathCommand::LineTo)
                     && inner_cmd == PathCommand::CubicTo){
-                    printf("Comparing line (%f %f) (%f %f) with cubic (%f %f) (%f %f) (%f %f) (%f %f)\n\n",
-                               outer_line[0].x, outer_line[0].y, outer_line[1].x, outer_line[1].y,
-                               inner_cubic[0].x, inner_cubic[0].y, inner_cubic[1].x, inner_cubic[1].y, inner_cubic[2].x, inner_cubic[2].y, inner_cubic[3].x, inner_cubic[3].y);
+                    // printf("Comparing line (%f %f) (%f %f) with cubic (%f %f) (%f %f) (%f %f) (%f %f)\n\n",
+                    //            outer_line[0].x, outer_line[0].y, outer_line[1].x, outer_line[1].y,
+                    //            inner_cubic[0].x, inner_cubic[0].y, inner_cubic[1].x, inner_cubic[1].y, inner_cubic[2].x, inner_cubic[2].y, inner_cubic[3].x, inner_cubic[3].y);
                 }
                 // cubic line
                 if (outer_cmd == PathCommand::CubicTo
                     && (inner_cmd == PathCommand::Close || inner_cmd == PathCommand::LineTo)){
-                    printf("Comparing cubic (%f %f) (%f %f) (%f %f) (%f %f) with line (%f %f) (%f %f)\n\n",
-                               outer_cubic[0].x, outer_cubic[0].y, outer_cubic[1].x, outer_cubic[1].y, outer_cubic[2].x, outer_cubic[2].y, outer_cubic[3].x, outer_cubic[3].y,
-                               inner_line[0].x, inner_line[0].y, inner_line[1].x, inner_line[1].y);
+                    // printf("Comparing cubic (%f %f) (%f %f) (%f %f) (%f %f) with line (%f %f) (%f %f)\n\n",
+                    //            outer_cubic[0].x, outer_cubic[0].y, outer_cubic[1].x, outer_cubic[1].y, outer_cubic[2].x, outer_cubic[2].y, outer_cubic[3].x, outer_cubic[3].y,
+                    //            inner_line[0].x, inner_line[0].y, inner_line[1].x, inner_line[1].y);
                 }
                 // cubic cubic
                 if (outer_cmd == PathCommand::CubicTo && inner_cmd == PathCommand::CubicTo){
-                    printf("Comparing cubic (%f %f) (%f %f) (%f %f) (%f %f) with cubic (%f %f) (%f %f) (%f %f) (%f %f)\n\n",
-                               outer_cubic[0].x, outer_cubic[0].y, outer_cubic[1].x, outer_cubic[1].y, outer_cubic[2].x, outer_cubic[2].y, outer_cubic[3].x, outer_cubic[3].y,
-                               inner_cubic[0].x, inner_cubic[0].y, inner_cubic[1].x, inner_cubic[1].y, inner_cubic[2].x, inner_cubic[2].y, inner_cubic[3].x, inner_cubic[3].y);
+                    // printf("Comparing cubic (%f %f) (%f %f) (%f %f) (%f %f) with cubic (%f %f) (%f %f) (%f %f) (%f %f)\n\n",
+                    //            outer_cubic[0].x, outer_cubic[0].y, outer_cubic[1].x, outer_cubic[1].y, outer_cubic[2].x, outer_cubic[2].y, outer_cubic[3].x, outer_cubic[3].y,
+                    //            inner_cubic[0].x, inner_cubic[0].y, inner_cubic[1].x, inner_cubic[1].y, inner_cubic[2].x, inner_cubic[2].y, inner_cubic[3].x, inner_cubic[3].y);
                 }
 
                 if (num_intersections){
@@ -333,8 +333,6 @@ private:
 
     void _splitLine(ShapePath& path, uint32_t cmd_num, uint32_t pts_num, Point p, uint32_t& offset, uint32_t& pts_offset)
     {
-        // TODO: cant index with numbers, i.e cmd_num, pts_num, array size keep changing... do something with this....
-        // maybe just add some offset? if we are going along path in order, just keep increasing offset by 1 for line, 3 for cubic?
         printf("Before line split: \n");
         for( uint32_t i = 0; i < path.cmdCnt; i++){
             printf("Cmd: %u\n", path.cmds[i]);
@@ -396,15 +394,31 @@ private:
 
         ShapePath *current = stencil;
         ShapePath *other = t_stencil;
+
         bool start = false;
 
         // find first point on the outline
-        while(i < i_max){
-
-
-        }
     }
 
+    bool _isOnSegment(Point& p, Point* line)
+    {
+        Point a = {line[0].x, line[0].y};
+        Point b = {p.x, p.y};
+        Point c = {line[1].x, line[1].y};
+
+        float crossproduct = (c.y - a.y)*(b.x - a.x) - (c.x - a.x)*(b.y - a.y);
+        if (abs(crossproduct) < FLT_EPSILON) return false;
+
+        float dotproduct = (c.x - a.x)*(b.x - a.x) + (c.y - a.y)*(b.y - a.y);
+        if (dotproduct < 0) return false;
+
+        float sqLen = (b.x - a.x)*(b.x - a.x) + (b.y - a.y)*(b.y - a.y);
+        if (dotproduct > sqLen) return false;
+
+        return true;
+    }
+
+    // point is inside when number of intersections is odd
     bool _isInside(ShapePath* path, Point& p)
     {
         uint32_t i, i_pts;
@@ -417,17 +431,23 @@ private:
 
         while (cnt-- > 0){
             if (!(path->cmds[i] == PathCommand::MoveTo)){
-                if (path->cmds[i] == PathCommand::LineTo || path->cmds[i] == PathCommand::Close)
+                if (path->cmds[i] == PathCommand::LineTo || path->cmds[i] == PathCommand::Close){
                     getPoints(*path, i, i_pts, p_line);
-                    if (getLineSegmentIntersection(line, p_line, overlap)) num++;   // TODO: check check segment-segment, otherwise method doesn't work
+                    _isOnSegment(p, p_line);
+
+                    // if (getLineSegmentIntersection(line, p_line, overlap)) num++;
+                    // TODO: check check segment-segment, otherwise method doesn't work
+                    i_pts++;
+                }
                 else{
                     // TODO: add for cubic
+                    i_pts+=3;
                 }
             }
             i++;
         }
 
-        return num%2 == 0;
+        return num%2 != 0;
     }
 
     void _addIntersections()

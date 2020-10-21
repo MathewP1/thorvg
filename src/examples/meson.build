@@ -22,6 +22,7 @@ source_file = [
     'Stacking.cpp',
     'Stress.cpp',
     'Stroke.cpp',
+    'Stencil.cpp',
     'StrokeLine.cpp',
     'Svg2.cpp',
     'Svg.cpp',
