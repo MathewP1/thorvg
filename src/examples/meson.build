@@ -20,6 +20,7 @@ source_file = [
     'SceneTransform.cpp',
     'Shape.cpp',
     'Stacking.cpp',
+    'Stencil.cpp',
     'Stress.cpp',
     'Stroke.cpp',
     'StrokeLine.cpp',
